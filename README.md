@@ -19,6 +19,6 @@ The repositories are as follows:
 
 ### A page for controlling a microcontroller
 
-![Control Page](./images/open.png?raw=true "Control Page")
+![Control Page](./images/control.png?raw=true "Control Page")
 
 
