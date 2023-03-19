@@ -44,7 +44,7 @@ pub fn main_page(app: &App) -> Element<Protocol> {
     .spacing(10)
     .padding(10);
 
-    let port_container = scrollable(c).height(400);
+    let port_container = scrollable(c).height(200);
 
     let content = Column::new()
         .align_items(Alignment::Center)
@@ -52,7 +52,6 @@ pub fn main_page(app: &App) -> Element<Protocol> {
         .push(sp)
         .push(text("Select a port from the list below"))
         .push(b)
-        // .push(c)
         .push(port_container);
 
     Container::new(content)
