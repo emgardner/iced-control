@@ -46,19 +46,44 @@ pub enum DeviceCommands {
     SetGpioPin,
     ClearGpioPin,
     GetTime,
-    GetStatus,
+    GetState,
 }
 
-pub type DeviceResponse = Option<Result<String, std::io::Error>>;
+#[derive(Debug, Copy, Clone)]
+pub enum DeviceResponses {
+    Success,
+    Error,
+    Time(u32)
+}
+
+// pub type DeviceResponse = Option<Result<String, std::io::Error>>;
+pub type DeviceResponse = Option<Result<DeviceResponses, std::io::Error>>;
 
 impl DeviceDriver {
     pub fn new(port: SerialStream) -> Self {
-        println!("New Port");
         Self { port }
     }
 
     pub async fn close(self) -> SerialStream {
         self.port
+    }
+
+    fn parse_response(&self, buffer: String) -> DeviceResponses {
+        if let Some(c) = buffer.chars().nth(0) {
+            match c {
+                'X' => DeviceResponses::Error,
+                'T' => {
+                    if let Ok(t) = buffer[1..buffer.len()-1].parse::<u32>() {
+                        DeviceResponses::Time(t)
+                    } else {
+                        DeviceResponses::Error
+                    }
+                },
+                _ => DeviceResponses::Success
+            }
+        } else {
+            DeviceResponses::Error
+        }
     }
 
     async fn write_command(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
@@ -68,7 +93,6 @@ impl DeviceDriver {
     async fn read_response(&mut self) -> Option<Result<String, std::io::Error>> {
         let mut reader = LineCodec.framed(&mut self.port);
         let res = reader.next().await;
-        println!("{:?}", res);
         res
     }
 
@@ -77,26 +101,40 @@ impl DeviceDriver {
         match command {
             DeviceCommands::SetGpioPin => {
                 let _ = write!(buff_out, "P\n");
-            }
+            },
             DeviceCommands::ClearGpioPin => {
                 let _ = write!(buff_out, "C\n");
-            }
+            },
             DeviceCommands::PwmOn => {
                 let _ = write!(buff_out, "E\n");
-            }
+            },
             DeviceCommands::PwmOff => {
                 let _ = write!(buff_out, "O\n");
-            }
+            },
             DeviceCommands::PwmDuty(duty) => {
                 let _ = write!(buff_out, "D{}\n", duty);
-            }
+            },
             DeviceCommands::PwmSetFreq(hz) => {
                 let _ = write!(buff_out, "F{}\n", hz);
-            }
+            },
+            DeviceCommands::GetTime => {
+                let _ = write!(buff_out, "T\n");
+            },
             _ => (),
         }
-        self.write_command(&buff_out.as_bytes()).await;
-        self.read_response().await
+        let wresult = self.write_command(&buff_out.as_bytes()).await;
+        match wresult {
+            Ok(_bytesout) => (),
+            Err(e) => return Some(Err(e)),
+        };
+        if let Some(resp) = self.read_response().await {
+            match resp {
+                Ok(s) => Some(Ok(self.parse_response(s))),
+                Err(e) => Some(Err(e))
+            }
+        } else {
+            None
+        }
     }
 
     pub async fn set_gpio(&mut self) -> DeviceResponse {
@@ -113,5 +151,9 @@ impl DeviceDriver {
 
     pub async fn set_pwm_duty(&mut self, percent: u8) -> DeviceResponse {
         self.handle_command(DeviceCommands::PwmDuty(percent)).await
+    }
+
+    pub async fn get_time(&mut self) -> DeviceResponse {
+        self.handle_command(DeviceCommands::GetTime).await
     }
 }
